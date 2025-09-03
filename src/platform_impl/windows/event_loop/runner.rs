@@ -137,7 +137,10 @@ impl<T> EventLoopRunner<T> {
   }
 
   pub fn handling_events(&self) -> bool {
-    self.runner_state.get() != RunnerState::Idle
+    !matches!(
+      self.runner_state.get(),
+      RunnerState::Idle | RunnerState::Destroyed
+    )
   }
 
   pub fn should_buffer(&self) -> bool {
@@ -235,6 +238,12 @@ impl<T> EventLoopRunner<T> {
   }
 
   pub(crate) unsafe fn loop_destroyed(&self) {
+    if matches!(
+      self.runner_state.get(),
+      RunnerState::Uninitialized | RunnerState::Destroyed
+    ) {
+      return;
+    }
     self.move_state_to(RunnerState::Destroyed);
   }
 

@@ -67,6 +67,10 @@ pub enum Event<'a, T: 'static> {
     event: WindowEvent<'a>,
   },
 
+  /// Emitted when the OS sends an event to the event handler's hidden root window.
+  #[non_exhaustive]
+  ThreadEvent { event: ThreadEvent },
+
   /// Emitted when the OS sends an event to a device.
   #[non_exhaustive]
   DeviceEvent {
@@ -152,6 +156,9 @@ impl<T: Clone> Clone for Event<'static, T> {
         window_id: *window_id,
         event: event.clone(),
       },
+      ThreadEvent { event } => ThreadEvent {
+        event: event.clone(),
+      },
       UserEvent(event) => UserEvent(event.clone()),
       DeviceEvent { device_id, event } => DeviceEvent {
         device_id: *device_id,
@@ -180,6 +187,7 @@ impl<'a, T> Event<'a, T> {
     match self {
       UserEvent(_) => Err(self),
       WindowEvent { window_id, event } => Ok(WindowEvent { window_id, event }),
+      ThreadEvent { event } => Ok(ThreadEvent { event }),
       DeviceEvent { device_id, event } => Ok(DeviceEvent { device_id, event }),
       NewEvents(cause) => Ok(NewEvents(cause)),
       MainEventsCleared => Ok(MainEventsCleared),
@@ -205,6 +213,7 @@ impl<'a, T> Event<'a, T> {
       WindowEvent { window_id, event } => event
         .to_static()
         .map(|event| WindowEvent { window_id, event }),
+      ThreadEvent { event } => Some(ThreadEvent { event }),
       UserEvent(event) => Some(UserEvent(event)),
       DeviceEvent { device_id, event } => Some(DeviceEvent { device_id, event }),
       NewEvents(cause) => Some(NewEvents(cause)),
@@ -251,6 +260,14 @@ pub enum StartCause {
 
   /// Sent once, immediately after `run` is called. Indicates that the loop was just initialized.
   Init,
+}
+
+/// Describes an event from a the event loop's hidden `Window`.
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq)]
+pub enum ThreadEvent {
+  /// The window has been requested to close.
+  CloseRequested,
 }
 
 /// Describes an event from a `Window`.
