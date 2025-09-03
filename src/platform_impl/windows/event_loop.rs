@@ -2353,10 +2353,14 @@ unsafe extern "system" fn thread_event_target_callback<T: 'static>(
   // the closure to catch_unwind directly so that the match body indendation wouldn't change and
   // the git blame and history would be preserved.
   let callback = || match msg {
-    win32wm::WM_NCDESTROY => {
+    win32wm::WM_NCDESTROY | win32wm::WM_DESTROY => {
       remove_event_target_window_subclass::<T>(window);
       subclass_removed = true;
+
       let _ = RedrawWindow(Some(window), None, None, RDW_INTERNALPAINT);
+
+      subclass_input.event_loop_runner.loop_destroyed();
+
       LRESULT(0)
     }
     // Because WM_PAINT comes after all other messages, we use it during modal loops to detect
@@ -2413,6 +2417,10 @@ unsafe extern "system" fn thread_event_target_callback<T: 'static>(
     }
 
     // We don't process `WM_QUERYENDSESSION` yet until we introduce the same mechanism as Tauri's `ExitRequested` event
+    // @cynecx: This is somewhat problematic because we can't just emit an event. We have to decide in
+    // place/sync whether we want to "cancel" the request to end the session. This probably requires passing
+    // down a callback or something, which probably involves threading that through multiple abstraction
+    // layers.
     // win32wm::WM_QUERYENDSESSION => {}
     win32wm::WM_ENDSESSION => {
       // `wParam` is `FALSE` is for if the shutdown gets canceled,
@@ -2422,6 +2430,18 @@ unsafe extern "system" fn thread_event_target_callback<T: 'static>(
       }
       // Note: after we return 0 here, Windows will shut us down
       LRESULT(0)
+    }
+
+    win32wm::WM_CLOSE | win32wm::WM_QUERYENDSESSION => {
+      use crate::event::ThreadEvent::CloseRequested;
+      subclass_input.send_event(Event::ThreadEvent {
+        event: CloseRequested,
+      });
+      if msg == win32wm::WM_QUERYENDSESSION {
+        LRESULT(1)
+      } else {
+        LRESULT(0)
+      }
     }
 
     _ if msg == *USER_EVENT_MSG_ID => {
